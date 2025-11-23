@@ -1,3 +1,4 @@
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from typing import Optional
@@ -269,14 +270,17 @@ class AgendaGUI:
         # Instância da árvore AVL
         self.agenda = AVLTree()
         
+        # Variável para controlar edição (nome original quando começou a editar)
+        self.editing_original: Optional[str] = None
+        
         # Estilo
         self.setup_styles()
         
         # Componentes da interface
         self.create_widgets()
         
-        # Carrega dados automaticamente se existirem
-        self.load_contacts()
+        # Carrega dados automaticamente de forma silenciosa (sem abrir dialog)
+        self.load_on_startup()
         
         # Atualiza display
         self.refresh_display()
@@ -381,13 +385,23 @@ class AgendaGUI:
         btn_frame1 = tk.Frame(form_frame, bg='white')
         btn_frame1.pack(pady=15, padx=15, fill='x')
         
-        tk.Button(btn_frame1, text="Adicionar", font=('Arial', 10, 'bold'),
+        # Botão Adicionar (mantido)
+        self.btn_add = tk.Button(btn_frame1, text="Adicionar", font=('Arial', 10, 'bold'),
                  bg='#667eea', fg='white', command=self.add_contact,
-                 cursor='hand2', relief='flat', padx=20, pady=8).pack(side='left', expand=True, fill='x', padx=(0, 5))
+                 cursor='hand2', relief='flat', padx=20, pady=8)
+        self.btn_add.pack(side='left', expand=True, fill='x', padx=(0, 5))
         
-        tk.Button(btn_frame1, text="Limpar", font=('Arial', 10, 'bold'),
+        # Botão Limpar (mantido)
+        self.btn_clear = tk.Button(btn_frame1, text="Limpar", font=('Arial', 10, 'bold'),
                  bg='#e0e0e0', fg='#333', command=self.clear_form,
-                 cursor='hand2', relief='flat', padx=20, pady=8).pack(side='left', expand=True, fill='x', padx=(5, 0))
+                 cursor='hand2', relief='flat', padx=20, pady=8)
+        self.btn_clear.pack(side='left', expand=True, fill='x', padx=(5, 0))
+        
+        # --- Novo: Botão Salvar (aparece somente em modo de edição) ---
+        self.btn_save = tk.Button(btn_frame1, text="Salvar", font=('Arial', 10, 'bold'),
+                                  bg='#2ecc71', fg='white', command=self.save_edit,
+                                  cursor='hand2', relief='flat', padx=20, pady=8)
+        # Não dar pack aqui — ficará oculto até começar a editar.
         
         # Separador
         ttk.Separator(form_frame, orient='horizontal').pack(fill='x', pady=10)
@@ -464,6 +478,19 @@ class AgendaGUI:
     
     # ==================== MÉTODOS DA INTERFACE ====================
     
+    def load_on_startup(self):
+        """
+        Tenta carregar um arquivo 'agenda.txt' automaticamente sem abrir dialogs.
+        Isso evita que a interface 'trave' na inicialização pedindo um arquivo.
+        """
+        default_file = "agenda.txt"
+        if os.path.exists(default_file):
+            try:
+                loaded = self.agenda.load_from_file(default_file)
+                # não mostrar messagebox — carregamento silencioso
+            except Exception:
+                pass  # não interrompe a interface se algo falhar
+    
     def add_contact(self):
         """Adiciona ou atualiza um contato"""
         nome = self.nome_entry.get().strip()
@@ -471,6 +498,11 @@ class AgendaGUI:
         
         if not nome or not telefone:
             messagebox.showerror("Erro", "Preencha todos os campos!")
+            return
+        
+        # Se estivermos em modo de edição, não permitir adicionar — o botão Adicionar fica desabilitado durante edição.
+        if self.editing_original:
+            messagebox.showwarning("Aviso", "Salve ou cancele a edição antes de adicionar um novo contato.")
             return
         
         self.agenda.insert(nome, telefone)
@@ -501,7 +533,7 @@ class AgendaGUI:
                                   f"Contato '{nome}' não encontrado!")
     
     def edit_contact(self):
-        """Edita o contato selecionado"""
+        """Edita o contato selecionado (abre o formulário em modo edição)"""
         selected = self.tree.selection()
         if not selected:
             messagebox.showwarning("Aviso", "Selecione um contato para editar!")
@@ -510,11 +542,62 @@ class AgendaGUI:
         item = self.tree.item(selected[0])
         nome, telefone = item['values']
         
+        # Coloca os dados no formulário
         self.nome_entry.delete(0, tk.END)
         self.nome_entry.insert(0, nome)
         self.telefone_entry.delete(0, tk.END)
         self.telefone_entry.insert(0, telefone)
         self.nome_entry.focus()
+        
+        # Marca o nome original para referência ao salvar
+        self.editing_original = nome
+        
+        # Mostra o botão Salvar e desabilita Adicionar
+        try:
+            self.btn_save.pack(side='left', expand=True, fill='x', padx=(5, 0))
+        except Exception:
+            pass
+        self.btn_add.config(state='disabled')
+        self.btn_clear.config(state='normal')
+    
+    def save_edit(self):
+        """Salva a edição do contato atualmente em edição"""
+        if not self.editing_original:
+            messagebox.showwarning("Aviso", "Nenhum contato está em edição!")
+            return
+        
+        new_name = self.nome_entry.get().strip()
+        new_phone = self.telefone_entry.get().strip()
+        
+        if not new_name or not new_phone:
+            messagebox.showerror("Erro", "Preencha todos os campos antes de salvar!")
+            return
+        
+        # Se o nome mudou e já existe outro contato com esse nome, impedir sobrescrever
+        if new_name != self.editing_original:
+            existing = self.agenda.search(new_name)
+            if existing:
+                messagebox.showerror("Erro", f"Já existe um contato com o nome '{new_name}'. Escolha outro nome.")
+                return
+        
+        # Remove o contato antigo e insere o novo (mantendo balanceamento)
+        self.agenda.delete(self.editing_original)
+        self.agenda.insert(new_name, new_phone)
+        
+        # Reset estado de edição
+        self.editing_original = None
+        
+        # Esconder botão Salvar e reativar Adicionar
+        try:
+            self.btn_save.pack_forget()
+        except Exception:
+            pass
+        self.btn_add.config(state='normal')
+        
+        # Limpar formulário e atualizar lista
+        self.clear_form()
+        self.refresh_display()
+        messagebox.showinfo("Sucesso", "Contato atualizado com sucesso!")
     
     def delete_contact(self):
         """Exclui o contato selecionado"""
@@ -548,7 +631,7 @@ class AgendaGUI:
         self.rotation_label.config(text=str(self.agenda.rotation_count))
     
     def save_contacts(self):
-        """Salva contatos em arquivo"""
+        """Salva contatos em arquivo (dialog)"""
         filename = filedialog.asksaveasfilename(
             defaultextension=".txt",
             filetypes=[("Arquivo de Texto", "*.txt"), ("Todos os Arquivos", "*.*")],
@@ -562,7 +645,7 @@ class AgendaGUI:
                 messagebox.showerror("Erro", "Falha ao salvar os dados!")
     
     def load_contacts(self):
-        """Carrega contatos de arquivo"""
+        """Carrega contatos de arquivo (abre dialog)"""
         filename = filedialog.askopenfilename(
             filetypes=[("Arquivo de Texto", "*.txt"), ("Todos os Arquivos", "*.*")],
             initialfile="agenda.txt"
