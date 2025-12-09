@@ -87,7 +87,7 @@ class AVLTree:
     def _insert_recursive(self, node: Optional[Node], nome: str, telefone: str) -> Node:
         """Função recursiva de inserção com balanceamento"""
         
-        # 1. Inserção BST padrão
+        # 1. Inserção ABB padrão
         if not node:
             return Node(nome, telefone)
         
@@ -144,7 +144,7 @@ class AVLTree:
     def _delete_recursive(self, node: Optional[Node], nome: str) -> Optional[Node]:
         """Função recursiva de remoção com balanceamento"""
         
-        # 1. Remoção BST padrão
+        # 1. Remoção ABB padrão
         if not node:
             return node
         
@@ -401,7 +401,6 @@ class AgendaGUI:
         self.btn_save = tk.Button(btn_frame1, text="Salvar", font=('Arial', 10, 'bold'),
                                   bg='#2ecc71', fg='white', command=self.save_edit,
                                   cursor='hand2', relief='flat', padx=20, pady=8)
-        # Não dar pack aqui — ficará oculto até começar a editar.
         
         # Separador
         ttk.Separator(form_frame, orient='horizontal').pack(fill='x', pady=10)
@@ -573,7 +572,7 @@ class AgendaGUI:
             messagebox.showerror("Erro", "Preencha todos os campos antes de salvar!")
             return
         
-        # Se o nome mudou e já existe outro contato com esse nome, impedir sobrescrever
+        # Se o nome mudou e já existe outro contato com esse nome, impede de sobrescrever
         if new_name != self.editing_original:
             existing = self.agenda.search(new_name)
             if existing:
